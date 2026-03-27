@@ -33,16 +33,23 @@ var	storage = {
 			var	line = lines[i].replace(/^\s+|\s+$/g, "");
 			if (line === "")
 				continue;
-			var	a = line.split("?");
-			var	url = a[0];
-			var	params = a[1] || "";
+			var	qpos = line.indexOf("?");
+			var	url, params;
+			if (qpos >= 0) {
+				url = line.substring(0, qpos);
+				params = line.substring(qpos + 1);
+			} else {
+				url = line;
+				params = "";
+			}
 			var	a0 = params.split("&");
 			var	list = {"@": url};
 			for (var j = 0; j < a0.length; j++) {
 				var	m = a0[j].match(/^([_0-9A-Za-z]+)=(.*)$/);
 				if (!m)
 					continue;
-				list[m[1]] = decodeURIComponent(m[2]);
+				// PHP urldecode互換: +も%2Bも空白に変換
+				list[m[1]] = decodeURIComponent(m[2].replace(/\+/g, " ").replace(/%2B/gi, " "));
 			}
 			output.push(list);
 		}
@@ -66,7 +73,8 @@ var	storage = {
 				} else {
 					output += "&";
 				}
-				output += encodeURIComponent(key) + "=" + encodeURIComponent(obj[key]);
+				// PHP urlencode互換: 空白を+にする
+				output += encodeURIComponent(key) + "=" + encodeURIComponent(obj[key]).replace(/%20/g, "+");
 			}
 			output += "\n";
 		}
@@ -198,6 +206,49 @@ function	bin2hex(s)
 
 
 /* ============================================
+   Touch support
+   ============================================ */
+
+function	touchToMouse(e, type)
+{
+	var	touch = e.changedTouches[0];
+	var	target = e.target;
+	// SVGの最上位要素を探す(svgdrawまたはsvgtool)
+	while (target && target.tagName !== "svg")
+		target = target.parentElement;
+	var	rect = target ? target.getBoundingClientRect() : {left: 0, top: 0};
+	return {
+		offsetX: touch.clientX - rect.left,
+		offsetY: touch.clientY - rect.top,
+		pageX: touch.pageX,
+		pageY: touch.pageY,
+		preventDefault: function() { e.preventDefault(); }
+	};
+}
+
+function	setupTouch(svg, handler)
+{
+	svg.addEventListener("touchstart", function(e) {
+		e.preventDefault();
+		handler(touchToMouse(e, "mousedown"));
+		
+		var	onmouseup = svg.onmouseup;
+		
+		function	ontouchend(e2) {
+			e2.preventDefault();
+			svg.removeEventListener("touchend", ontouchend);
+			svg.removeEventListener("touchcancel", ontouchend);
+			if (onmouseup || svg.onmouseup) {
+				(svg.onmouseup || onmouseup)(touchToMouse(e2, "mouseup"));
+			}
+		}
+		svg.addEventListener("touchend", ontouchend);
+		svg.addEventListener("touchcancel", ontouchend);
+	}, {passive: false});
+}
+
+
+/* ============================================
    Editor (fged) - based on original fged.html
    ============================================ */
 
@@ -277,6 +328,7 @@ var	applprototype = {
 			appl.onmousedowndraw(e);
 		};
 		this.save();
+		updateDebug();
 	},
 	updatetool: function() {
 		var	s = "";
@@ -386,16 +438,16 @@ function	selecttool(selectchannel)
 		appl.unselectall();
 	};
 	this.onmousedowndraw = function(appl, elementlist, svg, e) {
-		var	sx = e.offsetX;
-		var	sy = e.offsetY;
+		var	sx = Math.round(e.offsetX);
+		var	sy = Math.round(e.offsetY);
 		var	gx = e.pageX;
 		var	gy = e.pageY;
 
 		appl.unselectall();
 
 		svg.onmouseup = function(e) {
-			var	ex = e.pageX - gx + sx;
-			var	ey = e.pageY - gy + sy;
+			var	ex = Math.round(e.pageX - gx + sx);
+			var	ey = Math.round(e.pageY - gy + sy);
 			var	l = Math.min(sx, ex);
 			var	t = Math.min(sy, ey);
 			var	r = Math.max(sx, ex);
@@ -509,16 +561,16 @@ function	polylinetool(selectchannel)
 		appl.updatetool();
 	};
 	this.onmousedowndraw = function(appl, elementlist, svg, e) {
-		var	sx = e.offsetX;
-		var	sy = e.offsetY;
+		var	sx = Math.round(e.offsetX);
+		var	sy = Math.round(e.offsetY);
 		var	gx = e.pageX;
 		var	gy = e.pageY;
 
 		appl.unselectall();
 
 		svg.onmouseup = function(e) {
-			var	ex = e.pageX - gx + sx;
-			var	ey = e.pageY - gy + sy;
+			var	ex = Math.round(e.pageX - gx + sx);
+			var	ey = Math.round(e.pageY - gy + sy);
 			var	l = Math.min(sx, ex);
 			var	t = Math.min(sy, ey);
 
@@ -672,6 +724,14 @@ function	showEditor(datapath)
 	elementlist = [];
 	svgdraw = document.getElementById("svgdraw");
 	svgtool = document.getElementById("svgtool");
+
+	// タッチ対応
+	if (!svgdraw._touchSetup) {
+		setupTouch(svgdraw, function(e) { appl.onmousedowndraw(e); });
+		setupTouch(svgtool, function(e) { appl.onmousedowntool(e); });
+		svgdraw._touchSetup = true;
+	}
+
 	applprototype.load();
 }
 
@@ -779,6 +839,26 @@ function	onload()
 }
 
 
+function	updateDebug()
+{
+	var	ta = document.getElementById("debugarea");
+	if (!ta) return;
+	var	s = "=== datapath: " + currentDatapath + " ===\n";
+	s += "=== raw localStorage ===\n";
+	s += (storage.getRaw(currentDatapath) || "(null)") + "\n";
+	s += "=== elementlist (" + elementlist.length + " items) ===\n";
+	for (var i = 0; i < elementlist.length; i++) {
+		var	el = elementlist[i];
+		s += "[" + i + "] @=" + el["@"] + " _X=" + el._X + " _Y=" + el._Y + " _w=" + el._w + " _h=" + el._h + " _S=" + el._S;
+		if (el.path) s += " path=" + el.path;
+		if (el.cf) s += " cf=" + el.cf;
+		if (el.datapath) s += " datapath=" + el.datapath;
+		s += "\n";
+	}
+	ta.value = s;
+}
+
+
 //--></script>
 </head><body onload="onload();">
 
@@ -789,8 +869,12 @@ function	onload()
 <div id="editorview" style="display:none;">
 <div><a href="javascript:void(0)" onclick="showList()">&#9664; back to list</a>
  | <span id="editorpath"></span></div>
-<svg id="svgtool" version="1.1" baseProfile="full" width="4000" height="32"></svg>
-<svg id="svgdraw" version="1.1" baseProfile="full" width="4000" height="4000"></svg>
+<svg id="svgtool" version="1.1" baseProfile="full" width="4000" height="32" style="touch-action:none;"></svg>
+<svg id="svgdraw" version="1.1" baseProfile="full" width="4000" height="400" style="touch-action:none; border:1px solid #ccc;"></svg>
+<div style="margin-top:4px;">
+<button onclick="updateDebug()">Refresh debug</button>
+<textarea id="debugarea" style="width:100%; height:200px; font-size:11px; font-family:monospace;"></textarea>
+</div>
 </div>
 
 </body></html>
