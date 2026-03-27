@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<title>uNetBTRON local</title>
+<script type="text/javascript"><!--
+
+/*
+
+	uNetBTRON https://github.com/paijp/unet-btron
+	Browser-local version using localStorage
+	
+	Based on original code Copyright (c) 2023 paijp
+	Licensed under GPL v3
+
+*/
+
+/* ============================================
+   Storage layer (localStorage, UTAD format)
+   ============================================ */
+
+var	storage = {
+	_storageKey: function(datapath) {
+		return "utad:" + datapath;
+	},
+
+	read: function(datapath) {
+		var	raw = localStorage.getItem(this._storageKey(datapath));
+		if (raw === null)
+			return null;
+		var	lines = raw.split("\n");
+		var	output = [];
+		for (var i = 0; i < lines.length; i++) {
+			var	line = lines[i].replace(/^\s+|\s+$/g, "");
+			if (line === "")
+				continue;
+			var	a = line.split("?");
+			var	url = a[0];
+			var	params = a[1] || "";
+			var	a0 = params.split("&");
+			var	list = {"@": url};
+			for (var j = 0; j < a0.length; j++) {
+				var	m = a0[j].match(/^([_0-9A-Za-z]+)=(.*)$/);
+				if (!m)
+					continue;
+				list[m[1]] = decodeURIComponent(m[2]);
+			}
+			output.push(list);
+		}
+		return output;
+	},
+
+	write: function(datapath, elementlist) {
+		var	output = "";
+		for (var i = 0; i < elementlist.length; i++) {
+			var	obj = elementlist[i];
+			var	keys = Object.keys(obj).sort();
+			output += obj["@"];
+			var	first = 1;
+			for (var k = 0; k < keys.length; k++) {
+				var	key = keys[k];
+				if (key === "@")
+					continue;
+				if (first) {
+					first = 0;
+					output += "?";
+				} else {
+					output += "&";
+				}
+				output += encodeURIComponent(key) + "=" + encodeURIComponent(obj[key]);
+			}
+			output += "\n";
+		}
+		localStorage.setItem(this._storageKey(datapath), output);
+	},
+
+	listDatapaths: function() {
+		var	result = [];
+		for (var i = 0; i < localStorage.length; i++) {
+			var	key = localStorage.key(i);
+			if (key.indexOf("utad:") === 0) {
+				result.push(key.substring(5));
+			}
+		}
+		return result;
+	},
+
+	remove: function(datapath) {
+		localStorage.removeItem(this._storageKey(datapath));
+	},
+
+	getRaw: function(datapath) {
+		return localStorage.getItem(this._storageKey(datapath));
+	},
+
+	setRaw: function(datapath, raw) {
+		localStorage.setItem(this._storageKey(datapath), raw);
+	},
+
+	exportAll: function() {
+		var	result = {};
+		var	paths = this.listDatapaths();
+		for (var i = 0; i < paths.length; i++) {
+			result[paths[i]] = this.getRaw(paths[i]);
+		}
+		return result;
+	},
+
+	importAll: function(data) {
+		for (var path in data) {
+			if (data.hasOwnProperty(path)) {
+				this.setRaw(path, data[path]);
+			}
+		}
+	}
+};
+
+
+/* ============================================
+   Default data (from utad repository)
+   ============================================ */
+
+var	defaultData = {
+	"68747470733a2f2f6769746875622e636f6d2f7061696a702f757461642e676974/r00000000":
+		"http://pa-i.jp/e0/link?_S=0&_X=400&_Y=200&_h=16&_svg=%3Cpolygon+points%3D%220+0+0+16+128+16+128+0%22+stroke%3D%22%23ff00ff%22+fill%3D%22transparent%22+stroke-width%3D%221%22+%2F%3E%3Ctext+x%3D%220%22+y%3D%2214%22+font-size%3D%2212%22%3Er00000001%3C%2Ftext%3E&_w=128&cf=ff00ff&datapath=68747470733a2f2f6769746875622e636f6d2f7061696a702f757461642e676974%2Fr00000001\n" +
+		"http://pa-i.jp/a0/fged?_S=0&_type=appl%3F_S%3D0&cf=ff0000&draw=\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=61&_Y=63&_h=14&_svg=%3Cpolyline+points%3D%220+14+73+0%22+stroke%3D%22%23ff0000%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=73&cf=ff0000&lt=3&path=0+14+73+0\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=97&_Y=68&_h=71&_svg=%3Cpolyline+points%3D%220+0+8+71%22+stroke%3D%22%23ff0000%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=8&cf=ff0000&lt=3&path=0+0+8+71\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=142&_Y=48&_h=84&_svg=%3Cpolyline+points%3D%220+84+32+0%22+stroke%3D%22%23ff0000%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=32&cf=ff0000&lt=3&path=0+84+32+0\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=174&_Y=48&_h=57&_svg=%3Cpolyline+points%3D%220+0+34+57%22+stroke%3D%22%23ff0000%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=34&cf=ff0000&lt=3&path=0+0+34+57\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=162&_Y=77&_h=11&_svg=%3Cpolyline+points%3D%220+11+25+0%22+stroke%3D%22%23ff0000%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=25&cf=ff0000&lt=3&path=0+11+25+0\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=234&_Y=48&_h=69&_svg=%3Cpolyline+points%3D%220+0+6+69%22+stroke%3D%22%23ff0000%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=6&cf=ff0000&lt=3&path=0+0+6+69\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=218&_Y=38&_h=8&_svg=%3Cpolyline+points%3D%220+8+52+0%22+stroke%3D%22%23ff0000%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=52&cf=ff0000&lt=3&path=0+8+52+0\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=270&_Y=38&_h=76&_svg=%3Cpolyline+points%3D%220+0+4+76%22+stroke%3D%22%23ff0000%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=4&cf=ff0000&lt=3&path=0+0+4+76\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=221&_Y=114&_h=8&_svg=%3Cpolyline+points%3D%2253+0+0+8%22+stroke%3D%22%23ff0000%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=53&cf=ff0000&lt=3&path=53+0+0+8\n",
+
+	"68747470733a2f2f6769746875622e636f6d2f7061696a702f757461642e676974/r00000001":
+		"http://pa-i.jp/e0/link?_S=0&_X=200&_Y=100&_h=16&_svg=%3Cpolygon+points%3D%220+0+0+16+128+16+128+0%22+stroke%3D%22%23ff00ff%22+fill%3D%22transparent%22+stroke-width%3D%221%22+%2F%3E%3Ctext+x%3D%220%22+y%3D%2214%22+font-size%3D%2212%22%3Er00000000%3C%2Ftext%3E&_w=128&cf=ff00ff&datapath=68747470733a2f2f6769746875622e636f6d2f7061696a702f757461642e676974%2Fr00000000\n" +
+		"http://pa-i.jp/a0/fged?_S=0&_type=appl%3F_S%3D0&cf=0000ff&draw=\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=20&_Y=30&_h=80&_svg=%3Cpolyline+points%3D%220+0+33+80%22+stroke%3D%22%230000ff%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=33&cf=0000ff&lt=3&path=0+0+33+80\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=53&_Y=22&_h=88&_svg=%3Cpolyline+points%3D%220+88+25+0%22+stroke%3D%22%230000ff%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=25&cf=0000ff&lt=3&path=0+88+25+0\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=78&_Y=22&_h=78&_svg=%3Cpolyline+points%3D%220+0+34+78%22+stroke%3D%22%230000ff%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=34&cf=0000ff&lt=3&path=0+0+34+78\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=112&_Y=16&_h=84&_svg=%3Cpolyline+points%3D%220+84+21+0%22+stroke%3D%22%230000ff%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=21&cf=0000ff&lt=3&path=0+84+21+0\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=153&_Y=7&_h=10&_svg=%3Cpolyline+points%3D%2255+0+0+10%22+stroke%3D%22%230000ff%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=55&cf=0000ff&lt=3&path=55+0+0+10\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=153&_Y=17&_h=70&_svg=%3Cpolyline+points%3D%220+0+13+70%22+stroke%3D%22%230000ff%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=13&cf=0000ff&lt=3&path=0+0+13+70\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=166&_Y=70&_h=17&_svg=%3Cpolyline+points%3D%220+17+58+0%22+stroke%3D%22%230000ff%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=58&cf=0000ff&lt=3&path=0+17+58+0\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=217&_Y=41&_h=29&_svg=%3Cpolyline+points%3D%227+29+0+0%22+stroke%3D%22%230000ff%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=7&cf=0000ff&lt=3&path=7+29+0+0\n" +
+		"http://pa-i.jp/e0/polyline?_S=0&_X=193&_Y=41&_h=8&_svg=%3Cpolyline+points%3D%2224+0+0+8%22+stroke%3D%22%230000ff%22+fill%3D%22transparent%22+stroke-width%3D%223%22+%2F%3E&_w=24&cf=0000ff&lt=3&path=24+0+0+8\n"
+};
+
+function	initDefaultData()
+{
+	var	hasData = false;
+	for (var i = 0; i < localStorage.length; i++) {
+		if (localStorage.key(i).indexOf("utad:") === 0) {
+			hasData = true;
+			break;
+		}
+	}
+	if (hasData)
+		return;
+	for (var path in defaultData) {
+		if (defaultData.hasOwnProperty(path)) {
+			storage.setRaw(path, defaultData[path]);
+		}
+	}
+}
+
+
+/* ============================================
+   hex2bin / bin2hex
+   ============================================ */
+
+function	hex2bin(s)
+{
+	var	hex = "0123456789abcdef";
+	s = s.toLowerCase();
+	var	ret = "";
+	var	pos = 0;
+	while (pos < s.length) {
+		var	code = hex.indexOf(s.charAt(pos++)) << 4;
+		code |= hex.indexOf(s.charAt(pos++));
+		ret += String.fromCharCode(code);
+	}
+	return ret;
+}
+
+function	bin2hex(s)
+{
+	var	hex = "0123456789abcdef";
+	var	ret = "";
+	for (var i = 0; i < s.length; i++) {
+		var	c = s.charCodeAt(i);
+		ret += hex.charAt((c >> 4) & 0xf);
+		ret += hex.charAt(c & 0xf);
+	}
+	return ret;
+}
+
+
+/* ============================================
+   Editor (fged) - based on original fged.html
+   ============================================ */
+
+var	elementlist = [];
+var	toollist = [];
+var	appl = null;
+var	svgdraw = null;
+var	svgtool = null;
+var	currentDatapath = null;
+
+
+var	applprototype = {
+	url:	"http://pa-i.jp/a0/fged",
+	load: function() {
+		elementlist = storage.read(currentDatapath) || [];
+		for (var i = 0; i < elementlist.length; i++) {
+			var	element = elementlist[i];
+			if (element["@"] == this.url) {
+				if (appl == null) {
+					appl = Object.create(applprototype);
+					Object.assign(appl, element);
+					elementlist[i] = appl;
+				}
+			}
+		}
+		if (appl == null) {
+			appl = Object.create(applprototype);
+			appl["@"] = this.url + "?_type=appl";
+			elementlist[elementlist.length] = appl;
+		}
+		appl.afterload();
+	},
+	afterload: function() {
+		for (var i = 0; i < toollist.length; i++) {
+			var	tool = toollist[i];
+			if ((tool.init))
+				tool.init(this, elementlist);
+		}
+		this.updatedraw();
+		this.updatetool();
+	},
+	save: function() {
+		storage.write(currentDatapath, elementlist);
+	},
+	unselectall: function() {
+		for (var i = 0; i < elementlist.length; i++)
+			elementlist[i]._S = 0;
+		this.updatedraw();
+	},
+	updatedraw: function() {
+		var	s = "";
+		for (var i = 0; i < elementlist.length; i++) {
+			var	element = elementlist[i];
+
+			if ((element._svg))
+				s += '<g transform="translate(' + element._X + ',' + element._Y + ')">' + element._svg + '</g>';
+		}
+		for (var i = 0; i < elementlist.length; i++) {
+			var	element = elementlist[i];
+
+			if ((element._S - 0)) {
+				var	l = element._X - 2;
+				var	t = element._Y - 2;
+				var	r = l + (element._w - 0) + 4;
+				var	b = t + (element._h - 0) + 4;
+				var	points = l + ' ' + t + ' ' + r + ' ' + t + ' ' + r + ' ' + b + ' ' + l + ' ' + b;
+				s += '<polygon points="' + points + '" stroke="#000000" fill="transparent" stroke-width="3" stroke-dasharray="4,8">';
+				s += '<animate attributeName="stroke-dashoffset" values="0;12" dur="0.5s" repeatCount="indefinite" />';
+				s += '</polygon>';
+				s += '<polygon points="' + points + '" stroke="#ffffff" fill="transparent" stroke-width="3" stroke-dasharray="4,8">';
+				s += '<animate attributeName="stroke-dashoffset" values="6;18" dur="0.5s" repeatCount="indefinite" />';
+				s += '</polygon>';
+			}
+		}
+		svgdraw.innerHTML = s;
+		svgdraw.onmousedown = function(e) {
+			appl.onmousedowndraw(e);
+		};
+		this.save();
+	},
+	updatetool: function() {
+		var	s = "";
+		var	x = 0;
+		var	y = 0;
+
+		for (var i = 0; i < toollist.length; i++) {
+			var	tool = toollist[i];
+			if ((tool.gettoolsvg)) {
+				var	obj = tool.gettoolsvg();
+				s += '<g transform="translate(' + x + ',' + y + ')">';
+				s += obj._svg;
+				if ((tool.isselected) && (tool.isselected(this))) {
+					var	r = obj._w - 1;
+					var	b = obj._h - 1;
+					s += '<polygon points="1 1 ' + r + ' 1 ' + r + ' ' + b + ' 1 ' + b + '" stroke="#000000" fill="transparent" stroke-width="2" />';
+				}
+				s += '</g>';
+				x += obj._w;
+			}
+		}
+		svgtool.innerHTML = s;
+		svgtool.onmousedown = function(e) {
+			appl.onmousedowntool(e);
+		};
+		this.save();
+	},
+	onmousedowndraw: function(e) {
+		for (var i = 0; i < toollist.length; i++) {
+			var	tool = toollist[i];
+
+			if ((tool.onmousedowndraw) && (tool.isselected) && (tool.isselected(this))) {
+				tool.onmousedowndraw(this, elementlist, svgdraw, e);
+				return;
+			}
+		}
+	},
+	onmousedowntool: function(e) {
+		var	x = 0;
+		var	y = 0;
+
+		for (var i = 0; i < toollist.length; i++) {
+			var	tool = toollist[i];
+			if ((tool.gettoolsvg)) {
+				var	obj = tool.gettoolsvg();
+
+				if (e.offsetX < x)
+					;
+				else if (e.offsetY < y)
+					;
+				else if (e.offsetX >= x + obj._w)
+					;
+				else if (e.offsetY >= y + obj._h)
+					;
+				else {
+					if ((tool.onmousedowntool))
+						tool.onmousedowntool(this, elementlist, svgtool, e);
+					return;
+				}
+				x += obj._w;
+			}
+		}
+	},
+	setcurrentattribute: function(element) {
+		for (var i = 0; i < toollist.length; i++) {
+			var	tool = toollist[i];
+			if ((tool.setcurrentattribute))
+				tool.setcurrentattribute(this, element);
+		}
+	}
+};
+
+
+function	selecttool(selectchannel)
+{
+	var	toolurl = "";
+	this.gettoolsvg = function(appl, elementlist) {
+		var	s = '<polygon points="2 4 14 4 14 12 2 12" stroke="#000000" fill="transparent" stroke-width="1" stroke-dasharray="2,2" />';
+		return {"_svg": s, "_w": 16, "_h": 16};
+	};
+	this.isselected = function(appl) {
+		return (appl[selectchannel] == toolurl);
+	};
+	this.onmousedowntool = function(appl, elementlist, svg, e) {
+		if (appl[selectchannel] == toolurl) {
+			for (var i = 0; i < elementlist.length; i++) {
+				var	element = elementlist[i];
+
+				if ((element._S - 0)) {
+					appl.unselectall();
+					return;
+				}
+			}
+			for (var i = 0; i < elementlist.length; i++) {
+				var	element = elementlist[i];
+				if (!element._w)
+					continue;
+				if (!element._h)
+					continue;
+				element._S = 1;
+			}
+			appl.updatedraw();
+			return;
+		}
+		appl[selectchannel] = toolurl;
+		appl.updatetool();
+		appl.unselectall();
+	};
+	this.onmousedowndraw = function(appl, elementlist, svg, e) {
+		var	sx = e.offsetX;
+		var	sy = e.offsetY;
+		var	gx = e.pageX;
+		var	gy = e.pageY;
+
+		appl.unselectall();
+
+		svg.onmouseup = function(e) {
+			var	ex = e.pageX - gx + sx;
+			var	ey = e.pageY - gy + sy;
+			var	l = Math.min(sx, ex);
+			var	t = Math.min(sy, ey);
+			var	r = Math.max(sx, ex);
+			var	b = Math.max(sy, ey);
+			var	selectexists = 0;
+
+			svg.onmouseup = null;
+
+			for (var i = 0; i < elementlist.length; i++) {
+				var	element = elementlist[i];
+
+				if (!element._w)
+					continue;
+				if (!element._h)
+					continue;
+
+				element._S = 0;
+				if (element._X - 0 < l)
+					continue;
+				if (element._Y - 0 < t)
+					continue;
+				if (element._X - 0 + (element._w - 0) >= r)
+					continue;
+				if (element._Y - 0 + (element._h - 0) >= b)
+					continue;
+				element._S = 1;
+				selectexists = 1;
+			}
+			if ((selectexists)) {
+				appl.updatedraw();
+				return;
+			}
+			for (var i = elementlist.length - 1; i >= 0; i--) {
+				var	element = elementlist[i];
+
+				if (!element._w)
+					continue;
+				if (!element._h)
+					continue;
+
+				if (l < element._X - 0)
+					continue;
+				if (t < element._Y - 0)
+					continue;
+				if (r >= element._X - 0 + (element._w - 0))
+					continue;
+				if (b >= element._Y - 0 + (element._h - 0))
+					continue;
+				if ((element.onclick)) {
+					element.onclick();
+					return;
+				}
+			}
+			appl.updatedraw();
+		};
+	};
+}
+
+
+function	polylinetool(selectchannel)
+{
+	var	toolurl = "http://pa-i.jp/e0/polyline";
+
+	var	elementprototype = {
+		updatesvg: function() {
+			this._svg = '<polyline points="' + this.path + '" stroke="#' + this.cf + '" fill="transparent" stroke-width="' + this.lt + '" />';
+			var	a = this.path.split(" ");
+			var	i = 0;
+			var	l, t, r, b;
+			l = r = a[i++];
+			t = b = a[i++];
+			while (i < a.length) {
+				l = Math.min(l, a[i]);
+				r = Math.max(r, a[i++]);
+				t = Math.min(t, a[i]);
+				b = Math.max(b, a[i++]);
+			}
+			this._w = r - l;
+			this._h = b - t;
+		},
+		set_cf: function(cf) {
+			this.cf = cf;
+			this.updatesvg();
+		},
+		set_lt: function(lt) {
+			this.lt = lt;
+			this.updatesvg();
+		}
+	};
+	this.init = function(appl, elementlist) {
+		for (var i = 0; i < elementlist.length; i++) {
+			var	element = elementlist[i];
+
+			if (element["@"] == toolurl) {
+				var	newelement = Object.create(elementprototype);
+				Object.assign(newelement, element);
+				newelement.updatesvg();
+				elementlist[i] = newelement;
+			}
+		}
+	};
+	this.gettoolsvg = function(appl, elementlist) {
+		var	s = '<polyline points="2 12 14 4" stroke="#000000" fill="transparent" stroke-width="1" />';
+		return {"_svg": s, "_w": 16, "_h": 16};
+	};
+	this.isselected = function(appl) {
+		return (appl[selectchannel] == toolurl);
+	};
+	this.onmousedowntool = function(appl, elementlist, svg, e) {
+		appl[selectchannel] = toolurl;
+		appl.updatetool();
+	};
+	this.onmousedowndraw = function(appl, elementlist, svg, e) {
+		var	sx = e.offsetX;
+		var	sy = e.offsetY;
+		var	gx = e.pageX;
+		var	gy = e.pageY;
+
+		appl.unselectall();
+
+		svg.onmouseup = function(e) {
+			var	ex = e.pageX - gx + sx;
+			var	ey = e.pageY - gy + sy;
+			var	l = Math.min(sx, ex);
+			var	t = Math.min(sy, ey);
+
+			svg.onmouseup = null;
+
+			var	element = Object.create(elementprototype);
+			element["@"] = toolurl;
+			element._S = 1;
+			element._X = l;
+			element._Y = t;
+			element.cf = "000000";
+			element.path = (sx - l) + " " + (sy - t) + " " + (ex - l) + " " + (ey - t);
+			element.lt = "3";
+			appl.setcurrentattribute(element);
+			element.updatesvg();
+			elementlist[elementlist.length] = element;
+			appl.updatedraw();
+		};
+	};
+}
+
+
+function	deletetool(selectchannel)
+{
+	this.gettoolsvg = function(appl, elementlist) {
+		var	s = '<polygon points="13 3 3 13" stroke="#000000" fill="transparent" stroke-width="2" />';
+		s += '<polygon points="3 8 13 8" stroke="#000000" fill="transparent" stroke-width="4" />';
+		return {"_svg": s, "_w": 16, "_h": 16};
+	};
+	this.onmousedowntool = function(appl, elementlist, svg, e) {
+		var	i = 0;
+		while (i < elementlist.length) {
+			var	element = elementlist[i];
+			if ((element._S - 0)) {
+				elementlist.splice(i, 1);
+				continue;
+			}
+			i++;
+		}
+		appl.updatedraw();
+	};
+}
+
+
+function	cftool(selectchannel, color)
+{
+	this.gettoolsvg = function(appl, elementlist) {
+		var	s = '<polygon points="10 2 14 2 14 6 6 14 2 14 2 10" stroke="#000000" fill="#' + color + '" stroke-width="1" />';
+		return {"_svg": s, "_w": 16, "_h": 16};
+	};
+	this.isselected = function(appl) {
+		return (appl[selectchannel] == color);
+	};
+	this.onmousedowntool = function(appl, elementlist, svg, e) {
+		appl[selectchannel] = color;
+		for (var i = 0; i < elementlist.length; i++) {
+			var	element = elementlist[i];
+
+			if ((element._S - 0) && (element.set_cf))
+				element.set_cf(color);
+		}
+		appl.updatedraw();
+		appl.updatetool();
+	};
+	this.setcurrentattribute = function(appl, element) {
+		if ((appl[selectchannel] == color) && (element.set_cf))
+			element.set_cf(color);
+	};
+}
+
+
+function	linktool()
+{
+	var	toolurl = "http://pa-i.jp/e0/link";
+
+	var	elementprototype = {
+		updatesvg: function() {
+			var	w = this._w = 128;
+			var	h = this._h = 16;
+			this._svg = '<polygon points="0 0 0 ' + h + ' ' + w + ' ' + h + ' ' + w + ' 0" stroke="#' + this.cf + '" fill="transparent" stroke-width="1" />';
+			this._svg += '<text x="0" y="' + (h - 2) + '" font-size="12">' + this.datapath.split("/")[1] + '</text>';
+		},
+		set_cf: function(cf) {
+			this.cf = cf;
+			this.updatesvg();
+		},
+		onclick: function() {
+			showEditor(this.datapath);
+		}
+	};
+	this.init = function(appl, elementlist) {
+		for (var i = 0; i < elementlist.length; i++) {
+			var	element = elementlist[i];
+
+			if (element["@"] == toolurl) {
+				var	newelement = Object.create(elementprototype);
+				Object.assign(newelement, element);
+				newelement.updatesvg();
+				elementlist[i] = newelement;
+			}
+		}
+	};
+}
+
+
+toollist = [
+	new selecttool("draw"),
+	new polylinetool("draw"),
+	new deletetool(),
+	new cftool("cf", "000000"),
+	new cftool("cf", "0000ff"),
+	new cftool("cf", "00ff00"),
+	new cftool("cf", "ff0000"),
+	new linktool()
+];
+
+
+/* ============================================
+   View switching: list view / editor view
+   ============================================ */
+
+function	showList()
+{
+	document.getElementById("listview").style.display = "";
+	document.getElementById("editorview").style.display = "none";
+
+	var	paths = storage.listDatapaths();
+	var	s = "<h3>data list</h3>";
+	for (var i = 0; i < paths.length; i++) {
+		var	path = paths[i];
+		var	hexpart = path.split("/")[0];
+		var	label = hex2bin(hexpart);
+		s += '<a href="javascript:void(0)" onclick="showEditor(\'' + path + '\')">' + label + ' (' + path + ')</a><br />';
+	}
+	s += '<hr />';
+	s += '<button onclick="createNewData()">New data</button>';
+	s += ' <button onclick="exportData()">Export JSON</button>';
+	s += ' <button onclick="importData()">Import JSON</button>';
+	s += ' <button onclick="resetToDefault()">Reset to default</button>';
+	s += ' <input type="file" id="importfile" style="display:none" onchange="doImport(this)" />';
+	document.getElementById("listcontent").innerHTML = s;
+}
+
+function	showEditor(datapath)
+{
+	document.getElementById("listview").style.display = "none";
+	document.getElementById("editorview").style.display = "";
+
+	currentDatapath = datapath;
+	appl = null;
+	elementlist = [];
+	svgdraw = document.getElementById("svgdraw");
+	svgtool = document.getElementById("svgtool");
+	applprototype.load();
+}
+
+function	createNewData()
+{
+	var	name = prompt("Name for new data:");
+	if (!name)
+		return;
+	var	hexname = bin2hex(name);
+	var	datapath = hexname + "/r00000000";
+	if (storage.getRaw(datapath) !== null) {
+		alert("Already exists: " + name);
+		return;
+	}
+	storage.setRaw(datapath, "");
+	showEditor(datapath);
+}
+
+function	exportData()
+{
+	var	data = storage.exportAll();
+	var	json = JSON.stringify(data, null, 2);
+	var	blob = new Blob([json], {type: "application/json"});
+	var	a = document.createElement("a");
+	a.href = URL.createObjectURL(blob);
+	a.download = "unetbtron-export.json";
+	a.click();
+}
+
+function	importData()
+{
+	document.getElementById("importfile").click();
+}
+
+function	doImport(input)
+{
+	var	file = input.files[0];
+	if (!file)
+		return;
+	var	reader = new FileReader();
+	reader.onload = function(e) {
+		try {
+			var	data = JSON.parse(e.target.result);
+			storage.importAll(data);
+			showList();
+		} catch (ex) {
+			alert("Import failed: " + ex.message);
+		}
+	};
+	reader.readAsText(file);
+	input.value = "";
+}
+
+function	resetToDefault()
+{
+	if (!confirm("Clear all data and reset to default?"))
+		return;
+	var	keys = [];
+	for (var i = 0; i < localStorage.length; i++) {
+		var	key = localStorage.key(i);
+		if (key.indexOf("utad:") === 0)
+			keys.push(key);
+	}
+	for (var i = 0; i < keys.length; i++)
+		localStorage.removeItem(keys[i]);
+	for (var path in defaultData) {
+		if (defaultData.hasOwnProperty(path))
+			storage.setRaw(path, defaultData[path]);
+	}
+	showList();
+}
+
+
+/* ============================================
+   Hash-based routing
+   ============================================ */
+
+function	route()
+{
+	var	hash = location.hash;
+	var	m = hash.match(/^#data=(.+)$/);
+	if (m) {
+		var	datapath = m[1];
+		if (storage.getRaw(datapath) === null)
+			storage.setRaw(datapath, "");
+		showEditor(datapath);
+	} else {
+		showList();
+	}
+}
+
+function	onload()
+{
+	initDefaultData();
+	// hash-based routing (for GitHub Pages standalone use)
+	var	m = location.hash.match(/^#data=(.+)$/);
+	if (m) {
+		var	datapath = m[1];
+		if (storage.getRaw(datapath) === null)
+			storage.setRaw(datapath, "");
+		showEditor(datapath);
+	} else {
+		showList();
+	}
+}
+
+
+//--></script>
+</head><body onload="onload();">
+
+<div id="listview">
+<div id="listcontent"></div>
+</div>
+
+<div id="editorview" style="display:none;">
+<div><a href="javascript:void(0)" onclick="showList()">&#9664; back to list</a>
+ | <span id="editorpath"></span></div>
+<svg id="svgtool" version="1.1" baseProfile="full" width="4000" height="32"></svg>
+<svg id="svgdraw" version="1.1" baseProfile="full" width="4000" height="4000"></svg>
+</div>
+
+</body></html>
