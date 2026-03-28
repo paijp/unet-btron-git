@@ -686,7 +686,13 @@ function	linktool()
 		},
 		onclick: function() {
 			debuglog("link onclick: datapath=" + this.datapath);
-			window.open(location.pathname + "#data=" + this.datapath, this.datapath + ":" + (this.applpath || ""));
+			if (window !== window.top) {
+				// iframe内: 同一ページ内で遷移
+				showEditor(this.datapath);
+			} else {
+				// 通常: 新しいウィンドウで開く
+				window.open(location.pathname + "#data=" + this.datapath, this.datapath + ":" + (this.applpath || ""));
+			}
 		}
 	};
 	this.init = function(appl, elementlist) {
@@ -731,7 +737,7 @@ function	showList()
 		var	path = paths[i];
 		var	hexpart = path.split("/")[0];
 		var	label = hex2bin(hexpart);
-		s += '<a href="javascript:void(0)" onclick="showEditor(\'' + path + '\')">' + label + ' (' + path + ')</a><br />';
+		s += '<a href="javascript:void(0)" onclick="openData(\'' + path + '\')">' + label + ' (' + path + ')</a><br />';
 	}
 	s += '<hr />';
 	s += '<button onclick="createNewData()">New data</button>';
@@ -743,6 +749,17 @@ function	showList()
 	s += ' <input type="file" id="importfile" style="display:none" onchange="doImport(this)" />';
 	s += '<div id="pullstatus"></div>';
 	document.getElementById("listcontent").innerHTML = s;
+}
+
+function	openData(datapath)
+{
+	if (window !== window.top) {
+		// iframe内: 同一ページ内で遷移
+		showEditor(datapath);
+	} else {
+		// 通常: 新しいウィンドウで開く
+		window.open(location.pathname + "#data=" + datapath, datapath);
+	}
 }
 
 function	showEditor(datapath)
