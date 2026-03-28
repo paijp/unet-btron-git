@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>uNetBTRON local</title>
 <script type="text/javascript"><!--
 
@@ -751,6 +752,15 @@ function	showList()
 	document.getElementById("listcontent").innerHTML = s;
 }
 
+function	openList()
+{
+	if (window !== window.top) {
+		showList();
+	} else {
+		window.open(location.pathname, currentDatapath || "_list");
+	}
+}
+
 function	openData(datapath)
 {
 	if (window !== window.top) {
@@ -1042,7 +1052,7 @@ function	updateDebug()
 
 <div id="editorview" style="display:none;">
 <div id="editorpath"></div>
-<div style="margin:0.5em 0;"><a href="javascript:void(0)" onclick="showList()">&#9664; back to list</a>
+<div style="margin:0.5em 0;"><a href="javascript:void(0)" onclick="openList()">&#9664; back to list</a>
  | <a href="javascript:void(0)" onclick="toggleDebug()">debug</a></div>
 <svg id="svgtool" version="1.1" baseProfile="full" width="4000" height="32" style="touch-action:none;"></svg>
 <svg id="svgdraw" version="1.1" baseProfile="full" width="4000" height="4000" style="touch-action:none;"></svg>
