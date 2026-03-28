@@ -686,7 +686,7 @@ function	linktool()
 		},
 		onclick: function() {
 			debuglog("link onclick: datapath=" + this.datapath);
-			showEditor(this.datapath);
+			window.open(location.pathname + "#data=" + this.datapath, this.datapath + ":" + (this.applpath || ""));
 		}
 	};
 	this.init = function(appl, elementlist) {
@@ -887,10 +887,10 @@ function	githubPull()
 	// localStorageのdatapath用: "https://github.com/<owner>/<repo>.git" をhexエンコード
 	var	hexDir = bin2hex("https://github.com/" + owner + "/" + repo + ".git");
 
-	pullStatus("Pulling from " + owner + "/" + repo + "/utad/ ...");
+	pullStatus("Pulling from " + owner + "/" + repo + " ...");
 
-	// utad/ ディレクトリ内の.utadファイルを取得
-	fetch(apiBase + "/contents/utad?ref=" + githubConfig.branch)
+	// リポジトリルートの.utadファイルを取得
+	fetch(apiBase + "/contents?ref=" + githubConfig.branch)
 	.then(function(res) {
 		if (!res.ok) throw new Error("GitHub API error: " + res.status);
 		return res.json();
@@ -902,7 +902,7 @@ function	githubPull()
 				utadFiles.push(entries[i]);
 		}
 		if (utadFiles.length === 0)
-			throw new Error("No .utad files found in utad/");
+			throw new Error("No .utad files found in repository root");
 
 		pullStatus("Downloading " + utadFiles.length + " files...");
 
