@@ -230,20 +230,23 @@ function	setupTouch(svg, handler)
 {
 	svg.addEventListener("touchstart", function(e) {
 		e.preventDefault();
+		debuglog("touchstart: touches=" + e.touches.length);
 		handler(touchToMouse(e, "mousedown"));
-		
-		var	onmouseup = svg.onmouseup;
+		debuglog("touchstart: after handler, svg.onmouseup=" + (typeof svg.onmouseup));
 		
 		function	ontouchend(e2) {
 			e2.preventDefault();
-			svg.removeEventListener("touchend", ontouchend);
-			svg.removeEventListener("touchcancel", ontouchend);
-			if (onmouseup || svg.onmouseup) {
-				(svg.onmouseup || onmouseup)(touchToMouse(e2, "mouseup"));
+			debuglog("touchend: svg.onmouseup=" + (typeof svg.onmouseup));
+			document.removeEventListener("touchend", ontouchend);
+			document.removeEventListener("touchcancel", ontouchend);
+			if (svg.onmouseup) {
+				svg.onmouseup(touchToMouse(e2, "mouseup"));
+			} else {
+				debuglog("touchend: NO onmouseup to call");
 			}
 		}
-		svg.addEventListener("touchend", ontouchend);
-		svg.addEventListener("touchcancel", ontouchend);
+		document.addEventListener("touchend", ontouchend);
+		document.addEventListener("touchcancel", ontouchend);
 	}, {passive: false});
 }
 
@@ -357,6 +360,7 @@ var	applprototype = {
 		this.save();
 	},
 	onmousedowndraw: function(e) {
+		debuglog("onmousedowndraw: offsetX=" + e.offsetX + " offsetY=" + e.offsetY);
 		for (var i = 0; i < toollist.length; i++) {
 			var	tool = toollist[i];
 
@@ -456,6 +460,8 @@ function	selecttool(selectchannel)
 
 			svg.onmouseup = null;
 
+			debuglog("mouseup: click=(" + l + "," + t + ")-(" + r + "," + b + ")");
+
 			for (var i = 0; i < elementlist.length; i++) {
 				var	element = elementlist[i];
 
@@ -477,6 +483,7 @@ function	selecttool(selectchannel)
 				selectexists = 1;
 			}
 			if ((selectexists)) {
+				debuglog("  rect-select found");
 				appl.updatedraw();
 				return;
 			}
@@ -488,6 +495,7 @@ function	selecttool(selectchannel)
 				if (!element._h)
 					continue;
 
+				debuglog("  [" + i + "] @=" + element["@"] + " _X=" + (element._X-0) + " _Y=" + (element._Y-0) + " _w=" + (element._w-0) + " _h=" + (element._h-0) + " onclick=" + (!!element.onclick) + " hit=" + (l >= (element._X-0) && t >= (element._Y-0) && r < (element._X-0)+(element._w-0) && b < (element._Y-0)+(element._h-0)));
 				if (l < element._X - 0)
 					continue;
 				if (t < element._Y - 0)
@@ -496,11 +504,13 @@ function	selecttool(selectchannel)
 					continue;
 				if (b >= element._Y - 0 + (element._h - 0))
 					continue;
+				debuglog("  -> onclick on [" + i + "]");
 				if ((element.onclick)) {
 					element.onclick();
 					return;
 				}
 			}
+			debuglog("  no hit");
 			appl.updatedraw();
 		};
 	};
@@ -658,6 +668,7 @@ function	linktool()
 			this.updatesvg();
 		},
 		onclick: function() {
+			debuglog("link onclick: datapath=" + this.datapath);
 			showEditor(this.datapath);
 		}
 	};
@@ -839,6 +850,14 @@ function	onload()
 }
 
 
+function	debuglog(msg)
+{
+	var	ta = document.getElementById("debuglog");
+	if (!ta) return;
+	ta.value += msg + "\n";
+	ta.scrollTop = ta.scrollHeight;
+}
+
 function	updateDebug()
 {
 	var	ta = document.getElementById("debugarea");
@@ -873,7 +892,9 @@ function	updateDebug()
 <svg id="svgdraw" version="1.1" baseProfile="full" width="4000" height="400" style="touch-action:none; border:1px solid #ccc;"></svg>
 <div style="margin-top:4px;">
 <button onclick="updateDebug()">Refresh debug</button>
-<textarea id="debugarea" style="width:100%; height:200px; font-size:11px; font-family:monospace;"></textarea>
+<textarea id="debugarea" style="width:100%; height:150px; font-size:11px; font-family:monospace;"></textarea>
+<button onclick="document.getElementById('debuglog').value=''">Clear log</button>
+<textarea id="debuglog" style="width:100%; height:150px; font-size:11px; font-family:monospace;"></textarea>
 </div>
 </div>
 
