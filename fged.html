@@ -745,8 +745,11 @@ function	showList()
 	s += ' <button onclick="exportData()">Export JSON</button>';
 	s += ' <button onclick="importData()">Import JSON</button>';
 	s += ' <button onclick="resetToDefault()">Reset</button>';
-	if (githubConfig.isGitHub)
-		s += ' <button onclick="githubPull()">Pull from GitHub</button>';
+	if (githubConfig.isGitHub) {
+		s += ' <button onclick="githubPull()">Pull</button>';
+		s += ' <button onclick="githubPush()">Push</button>';
+		s += ' <button onclick="clearToken()">Clear token</button>';
+	}
 	s += ' <input type="file" id="importfile" style="display:none" onchange="doImport(this)" />';
 	s += '<div id="pullstatus"></div>';
 	document.getElementById("listcontent").innerHTML = s;
@@ -957,6 +960,115 @@ function	githubPull()
 	})
 	.catch(function(err) {
 		pullStatus("Pull failed: " + err.message);
+	});
+}
+
+
+function	getToken()
+{
+	var	token = localStorage.getItem("github_pat");
+	if (token)
+		return token;
+	token = prompt("GitHub Personal Access Token:");
+	if (!token)
+		return null;
+	localStorage.setItem("github_pat", token);
+	return token;
+}
+
+function	clearToken()
+{
+	localStorage.removeItem("github_pat");
+	pullStatus("Token cleared.");
+}
+
+function	githubPush()
+{
+	if (!githubConfig.isGitHub) {
+		pullStatus("Not on GitHub Pages. Cannot push.");
+		return;
+	}
+
+	var	token = getToken();
+	if (!token)
+		return;
+
+	var	owner = githubConfig.owner;
+	var	repo = githubConfig.repo;
+	var	hexDir = bin2hex("https://github.com/" + owner + "/" + repo + ".git");
+	var	apiBase = "https://api.github.com/repos/" + owner + "/" + repo;
+
+	// このリポジトリに属するdatapathを収集
+	var	paths = storage.listDatapaths();
+	var	targetPaths = [];
+	for (var i = 0; i < paths.length; i++) {
+		if (paths[i].indexOf(hexDir + "/") === 0)
+			targetPaths.push(paths[i]);
+	}
+
+	if (targetPaths.length === 0) {
+		pullStatus("No data to push for " + owner + "/" + repo);
+		return;
+	}
+
+	pullStatus("Pushing " + targetPaths.length + " files to " + owner + "/" + repo + " ...");
+
+	// 直列で1ファイルずつpush（GitHub APIのコンフリクト回避）
+	var	pushed = 0;
+	var	chain = Promise.resolve();
+
+	for (var i = 0; i < targetPaths.length; i++) {
+		(function(datapath) {
+			chain = chain.then(function() {
+				var	basename = datapath.split("/")[1]; // e.g. "r00000000"
+				var	filename = basename + ".utad";
+				var	content = storage.getRaw(datapath) || "";
+				var	b64content = btoa(unescape(encodeURIComponent(content)));
+
+				// まず既存ファイルのSHAを取得
+				return fetch(apiBase + "/contents/" + filename + "?ref=" + githubConfig.branch, {
+					headers: {"Authorization": "token " + token}
+				})
+				.then(function(res) {
+					if (res.ok) return res.json();
+					if (res.status === 404) return null;
+					throw new Error("GET " + filename + ": " + res.status);
+				})
+				.then(function(existing) {
+					var	body = {
+						message: "Update " + filename,
+						content: b64content,
+						branch: githubConfig.branch
+					};
+					if (existing && existing.sha)
+						body.sha = existing.sha;
+
+					return fetch(apiBase + "/contents/" + filename, {
+						method: "PUT",
+						headers: {
+							"Authorization": "token " + token,
+							"Content-Type": "application/json"
+						},
+						body: JSON.stringify(body)
+					});
+				})
+				.then(function(res) {
+					if (!res.ok)
+						return res.json().then(function(j) {
+							throw new Error("PUT " + filename + ": " + res.status + " " + (j.message || ""));
+						});
+					pushed++;
+					pullStatus("Pushed " + pushed + "/" + targetPaths.length + " files...");
+				});
+			});
+		})(targetPaths[i]);
+	}
+
+	chain.then(function() {
+		pullStatus("Push complete: " + pushed + " files updated.");
+	})
+	.catch(function(err) {
+		pullStatus("Push failed: " + err.message);
 	});
 }
 
