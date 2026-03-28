@@ -167,13 +167,11 @@ function	initDefaultData()
 	if (hasData)
 		return "existing";
 
-	detectGitHub();
 	if (githubConfig.isGitHub) {
-		// GitHub Pages: pullで初期データを取得を試みる
 		return "pull";
 	}
 
-	// それ以外: 埋め込みデータを使用
+	// GitHub Pages以外: 埋め込みデータを使用
 	for (var path in defaultData) {
 		if (defaultData.hasOwnProperty(path)) {
 			storage.setRaw(path, defaultData[path]);
@@ -739,8 +737,9 @@ function	showList()
 	s += '<button onclick="createNewData()">New data</button>';
 	s += ' <button onclick="exportData()">Export JSON</button>';
 	s += ' <button onclick="importData()">Import JSON</button>';
-	s += ' <button onclick="resetToDefault()">Reset to default</button>';
-	s += ' <button onclick="githubPull()">Pull from GitHub</button>';
+	s += ' <button onclick="resetToDefault()">Reset</button>';
+	if (githubConfig.isGitHub)
+		s += ' <button onclick="githubPull()">Pull from GitHub</button>';
 	s += ' <input type="file" id="importfile" style="display:none" onchange="doImport(this)" />';
 	s += '<div id="pullstatus"></div>';
 	document.getElementById("listcontent").innerHTML = s;
@@ -752,6 +751,10 @@ function	showEditor(datapath)
 	document.getElementById("editorview").style.display = "";
 
 	currentDatapath = datapath;
+	var	hexpart = datapath.split("/")[0];
+	var	record = datapath.split("/")[1] || "";
+	document.getElementById("editorpath").textContent = hex2bin(hexpart) + " / " + record;
+
 	appl = null;
 	elementlist = [];
 	svgdraw = document.getElementById("svgdraw");
@@ -819,7 +822,7 @@ function	doImport(input)
 
 function	resetToDefault()
 {
-	if (!confirm("Clear all data and reset to default?"))
+	if (!confirm("Clear all data and reset?"))
 		return;
 	var	keys = [];
 	for (var i = 0; i < localStorage.length; i++) {
@@ -829,9 +832,12 @@ function	resetToDefault()
 	}
 	for (var i = 0; i < keys.length; i++)
 		localStorage.removeItem(keys[i]);
-	for (var path in defaultData) {
-		if (defaultData.hasOwnProperty(path))
-			storage.setRaw(path, defaultData[path]);
+	// GitHub Pages以外（プレビュー等）ならサンプルデータを投入
+	if (!detectGitHub()) {
+		for (var path in defaultData) {
+			if (defaultData.hasOwnProperty(path))
+				storage.setRaw(path, defaultData[path]);
+		}
 	}
 	showList();
 }
@@ -871,12 +877,8 @@ function	pullStatus(msg)
 function	githubPull()
 {
 	if (!githubConfig.isGitHub) {
-		var	input = prompt("GitHub repo (owner/repo):", "paijp/utad");
-		if (!input) return;
-		var	parts = input.split("/");
-		if (parts.length !== 2) { alert("Format: owner/repo"); return; }
-		githubConfig.owner = parts[0];
-		githubConfig.repo = parts[1];
+		pullStatus("Not on GitHub Pages. Cannot pull.");
+		return;
 	}
 
 	var	owner = githubConfig.owner;
@@ -952,6 +954,7 @@ function	route()
 
 function	onload()
 {
+	detectGitHub();
 	var	result = initDefaultData();
 	if (result === "pull") {
 		// GitHub Pagesで初回: pullしてからリスト表示
