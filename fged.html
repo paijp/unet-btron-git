@@ -165,12 +165,21 @@ function	initDefaultData()
 		}
 	}
 	if (hasData)
-		return;
+		return "existing";
+
+	detectGitHub();
+	if (githubConfig.isGitHub) {
+		// GitHub Pages: pullで初期データを取得を試みる
+		return "pull";
+	}
+
+	// それ以外: 埋め込みデータを使用
 	for (var path in defaultData) {
 		if (defaultData.hasOwnProperty(path)) {
 			storage.setRaw(path, defaultData[path]);
 		}
 	}
+	return "default";
 }
 
 
@@ -230,23 +239,33 @@ function	setupTouch(svg, handler)
 {
 	svg.addEventListener("touchstart", function(e) {
 		e.preventDefault();
-		debuglog("touchstart: touches=" + e.touches.length);
-		handler(touchToMouse(e, "mousedown"));
-		debuglog("touchstart: after handler, svg.onmouseup=" + (typeof svg.onmouseup));
+		var	startE = touchToMouse(e, "mousedown");
+		var	moved = false;
+		
+		debuglog("touchstart: offsetX=" + startE.offsetX + " offsetY=" + startE.offsetY);
+		
+		function	ontouchmove(e2) {
+			moved = true;
+		}
 		
 		function	ontouchend(e2) {
 			e2.preventDefault();
-			debuglog("touchend: svg.onmouseup=" + (typeof svg.onmouseup));
-			document.removeEventListener("touchend", ontouchend);
-			document.removeEventListener("touchcancel", ontouchend);
+			svg.removeEventListener("touchmove", ontouchmove);
+			svg.removeEventListener("touchend", ontouchend);
+			svg.removeEventListener("touchcancel", ontouchend);
+			
+			var	endE = touchToMouse(e2, "mouseup");
+			debuglog("touchend: moved=" + moved + " offsetX=" + endE.offsetX + " offsetY=" + endE.offsetY);
+			
+			handler(startE);
 			if (svg.onmouseup) {
-				svg.onmouseup(touchToMouse(e2, "mouseup"));
-			} else {
-				debuglog("touchend: NO onmouseup to call");
+				svg.onmouseup(moved ? endE : startE);
 			}
 		}
-		document.addEventListener("touchend", ontouchend);
-		document.addEventListener("touchcancel", ontouchend);
+		
+		svg.addEventListener("touchmove", ontouchmove);
+		svg.addEventListener("touchend", ontouchend);
+		svg.addEventListener("touchcancel", ontouchend);
 	}, {passive: false});
 }
 
@@ -721,7 +740,9 @@ function	showList()
 	s += ' <button onclick="exportData()">Export JSON</button>';
 	s += ' <button onclick="importData()">Import JSON</button>';
 	s += ' <button onclick="resetToDefault()">Reset to default</button>';
+	s += ' <button onclick="githubPull()">Pull from GitHub</button>';
 	s += ' <input type="file" id="importfile" style="display:none" onchange="doImport(this)" />';
+	s += '<div id="pullstatus"></div>';
 	document.getElementById("listcontent").innerHTML = s;
 }
 
@@ -817,6 +838,101 @@ function	resetToDefault()
 
 
 /* ============================================
+   GitHub sync
+   ============================================ */
+
+var	githubConfig = {
+	owner: null,
+	repo: null,
+	branch: "main",
+	isGitHub: false
+};
+
+function	detectGitHub()
+{
+	// https://<owner>.github.io/<repo>/ の形式を検出
+	var	m = location.hostname.match(/^([^.]+)\.github\.io$/);
+	if (m) {
+		githubConfig.owner = m[1];
+		var	pathParts = location.pathname.split("/").filter(function(s) { return s !== ""; });
+		githubConfig.repo = pathParts[0] || m[1] + ".github.io";
+		githubConfig.isGitHub = true;
+		return true;
+	}
+	return false;
+}
+
+function	pullStatus(msg)
+{
+	var	el = document.getElementById("pullstatus");
+	if (el) el.innerHTML = msg;
+}
+
+function	githubPull()
+{
+	if (!githubConfig.isGitHub) {
+		var	input = prompt("GitHub repo (owner/repo):", "paijp/utad");
+		if (!input) return;
+		var	parts = input.split("/");
+		if (parts.length !== 2) { alert("Format: owner/repo"); return; }
+		githubConfig.owner = parts[0];
+		githubConfig.repo = parts[1];
+	}
+
+	var	owner = githubConfig.owner;
+	var	repo = githubConfig.repo;
+	var	apiBase = "https://api.github.com/repos/" + owner + "/" + repo;
+	// localStorageのdatapath用: "https://github.com/<owner>/<repo>.git" をhexエンコード
+	var	hexDir = bin2hex("https://github.com/" + owner + "/" + repo + ".git");
+
+	pullStatus("Pulling from " + owner + "/" + repo + "/utad/ ...");
+
+	// utad/ ディレクトリ内の.utadファイルを取得
+	fetch(apiBase + "/contents/utad?ref=" + githubConfig.branch)
+	.then(function(res) {
+		if (!res.ok) throw new Error("GitHub API error: " + res.status);
+		return res.json();
+	})
+	.then(function(entries) {
+		var	utadFiles = [];
+		for (var i = 0; i < entries.length; i++) {
+			if (entries[i].name.match(/\.utad$/))
+				utadFiles.push(entries[i]);
+		}
+		if (utadFiles.length === 0)
+			throw new Error("No .utad files found in utad/");
+
+		pullStatus("Downloading " + utadFiles.length + " files...");
+
+		var	promises = [];
+		for (var i = 0; i < utadFiles.length; i++) {
+			promises.push(
+				fetch(utadFiles[i].download_url)
+				.then(function(res) { return res.text(); })
+			);
+		}
+		return Promise.all(promises).then(function(contents) {
+			var	count = 0;
+			for (var i = 0; i < utadFiles.length; i++) {
+				var	basename = utadFiles[i].name.replace(/\.utad$/, "");
+				var	datapath = hexDir + "/" + basename;
+				storage.setRaw(datapath, contents[i]);
+				count++;
+			}
+			return count;
+		});
+	})
+	.then(function(count) {
+		pullStatus("Pull complete: " + count + " files updated.");
+		showList();
+	})
+	.catch(function(err) {
+		pullStatus("Pull failed: " + err.message);
+	});
+}
+
+
+/* ============================================
    Hash-based routing
    ============================================ */
 
@@ -836,7 +952,13 @@ function	route()
 
 function	onload()
 {
-	initDefaultData();
+	var	result = initDefaultData();
+	if (result === "pull") {
+		// GitHub Pagesで初回: pullしてからリスト表示
+		showList(); // まず空のリストを表示
+		githubPull();
+		return;
+	}
 	// hash-based routing (for GitHub Pages standalone use)
 	var	m = location.hash.match(/^#data=(.+)$/);
 	if (m) {
@@ -849,6 +971,19 @@ function	onload()
 	}
 }
 
+
+function	toggleDebug()
+{
+	var	panel = document.getElementById("debugpanel");
+	if (panel.style.display === "none") {
+		panel.style.display = "";
+		svgdraw.setAttribute("height", "400");
+		updateDebug();
+	} else {
+		panel.style.display = "none";
+		svgdraw.setAttribute("height", "4000");
+	}
+}
 
 function	debuglog(msg)
 {
@@ -887,10 +1022,11 @@ function	updateDebug()
 
 <div id="editorview" style="display:none;">
 <div><a href="javascript:void(0)" onclick="showList()">&#9664; back to list</a>
- | <span id="editorpath"></span></div>
+ | <span id="editorpath"></span>
+ | <a href="javascript:void(0)" onclick="toggleDebug()">debug</a></div>
 <svg id="svgtool" version="1.1" baseProfile="full" width="4000" height="32" style="touch-action:none;"></svg>
-<svg id="svgdraw" version="1.1" baseProfile="full" width="4000" height="400" style="touch-action:none; border:1px solid #ccc;"></svg>
-<div style="margin-top:4px;">
+<svg id="svgdraw" version="1.1" baseProfile="full" width="4000" height="4000" style="touch-action:none;"></svg>
+<div id="debugpanel" style="display:none; margin-top:4px;">
 <button onclick="updateDebug()">Refresh debug</button>
 <textarea id="debugarea" style="width:100%; height:150px; font-size:11px; font-family:monospace;"></textarea>
 <button onclick="document.getElementById('debuglog').value=''">Clear log</button>
